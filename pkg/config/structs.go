@@ -10,6 +10,14 @@ type MySQLConfig struct {
 	ConnMaxLifetime time.Duration `env:"MYSQL_CONN_MAX_LIFETIME" envDefault:"1h"`
 }
 
+// PostgreSQLConfig holds PostgreSQL connection configuration.
+type PostgreSQLConfig struct {
+	DSN             string        `env:"POSTGRES_DSN"`
+	MaxOpenConns    int           `env:"POSTGRES_MAX_OPEN_CONNS" envDefault:"10"`
+	MaxIdleConns    int           `env:"POSTGRES_MAX_IDLE_CONNS" envDefault:"5"`
+	ConnMaxLifetime time.Duration `env:"POSTGRES_CONN_MAX_LIFETIME" envDefault:"1h"`
+}
+
 // RedisConfig holds Redis connection configuration.
 type RedisConfig struct {
 	Addr     string `env:"REDIS_ADDR" envDefault:"localhost:6379"`
