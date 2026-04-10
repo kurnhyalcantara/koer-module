@@ -46,14 +46,16 @@ func TestLoad_WithEnvFile(t *testing.T) {
 	}
 }
 
-func TestGenerateConfig_WithExtras(t *testing.T) {
+func TestGenerateConfig_ComposedStruct(t *testing.T) {
 	type ServiceConfig struct {
-		AppName string `env:"APP_NAME" envDefault:"my-service"`
-		Debug   bool   `env:"APP_DEBUG" envDefault:"false"`
+		GRPC          GRPCConfig
+		MySQL         MySQLConfig
+		Logger        LoggerConfig
+		PublicMethods []string `env:"PUBLIC_GRPC_METHODS" envSeparator:"," envDefault:""`
 	}
 
 	dir := t.TempDir()
-	filename := dir + "/test-extras.env"
+	filename := dir + "/test-composed.env"
 
 	if err := GenerateConfig(filename, ServiceConfig{}); err != nil {
 		t.Fatalf("GenerateConfig: %v", err)
@@ -65,28 +67,37 @@ func TestGenerateConfig_WithExtras(t *testing.T) {
 	}
 	content := string(data)
 
-	// mandatory entry still present
-	if !strings.Contains(content, "HTTP_PORT=8080") {
-		t.Error("missing mandatory HTTP_PORT entry")
+	// section headers derived from field names
+	for _, section := range []string{"# --- GRPC ---", "# --- MySQL ---", "# --- Logger ---"} {
+		if !strings.Contains(content, section) {
+			t.Errorf("missing section header %q", section)
+		}
 	}
-	// consumer-defined entries present
-	if !strings.Contains(content, "APP_NAME=my-service") {
-		t.Error("missing APP_NAME from extra config")
+	// entries from composed structs
+	if !strings.Contains(content, "GRPC_PORT=9090") {
+		t.Error("missing GRPC_PORT entry")
 	}
-	if !strings.Contains(content, "APP_DEBUG=false") {
-		t.Error("missing APP_DEBUG from extra config")
+	if !strings.Contains(content, "MYSQL_DSN=") {
+		t.Error("missing MYSQL_DSN entry")
 	}
-	// section header derived from type name
-	if !strings.Contains(content, "# --- ServiceConfig ---") {
-		t.Error("missing ServiceConfig section header")
+	if !strings.Contains(content, "LOGGER_LEVEL=info") {
+		t.Error("missing LOGGER_LEVEL entry")
+	}
+	// top-level env-tagged field
+	if !strings.Contains(content, "PUBLIC_GRPC_METHODS=") {
+		t.Error("missing PUBLIC_GRPC_METHODS entry")
+	}
+	// should NOT contain configs not in the composed struct
+	if strings.Contains(content, "HTTP_PORT") {
+		t.Error("unexpected HTTP_PORT entry — should not be generated")
 	}
 }
 
-func TestGenerateConfig(t *testing.T) {
+func TestGenerateConfig_AppConfig(t *testing.T) {
 	dir := t.TempDir()
 	filename := dir + "/test.env"
 
-	if err := GenerateConfig(filename); err != nil {
+	if err := GenerateConfig(filename, AppConfig{}); err != nil {
 		t.Fatalf("GenerateConfig: %v", err)
 	}
 

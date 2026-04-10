@@ -7,20 +7,23 @@ import (
 	"strings"
 )
 
-// GenerateConfig writes a .env template file derived from all mandatory
-// config structs defined in this package, followed by any extra config
-// structs provided by the consumer service. Each variable is written with
-// its default value, or left empty if no default is defined.
-// If filename is empty, ".env" is used.
+// GenerateConfig writes a .env template file derived from the provided
+// config structs. It inspects each struct's fields: nested struct fields
+// (without an `env` tag) are treated as sections, and fields with an
+// `env` tag are written as environment variable declarations with their
+// default values. If filename is empty, ".env" is used.
 //
-// Example:
+// Consumer services define their own config struct composing only the
+// infra configs they need:
 //
-//	type ServiceConfig struct {
+//	type Config struct {
+//	    GRPC   config.GRPCConfig
+//	    MySQL  config.MySQLConfig
+//	    Logger config.LoggerConfig
 //	    AppName string `env:"APP_NAME" envDefault:"my-service"`
-//	    Debug   bool   `env:"APP_DEBUG" envDefault:"false"`
 //	}
-//	config.GenerateConfig(".env", ServiceConfig{})
-func GenerateConfig(filename string, extras ...any) error {
+//	config.GenerateConfig(".env", Config{})
+func GenerateConfig(filename string, configs ...any) error {
 	if filename == "" {
 		filename = ".env"
 	}
@@ -29,41 +32,40 @@ func GenerateConfig(filename string, extras ...any) error {
 	sb.WriteString("# Auto-generated .env configuration\n")
 	sb.WriteString("# Edit values before running your service.\n\n")
 
-	sections := []struct {
-		name string
-		cfg  any
-	}{
-		{"MySQL", MySQLConfig{}},
-		{"Redis", RedisConfig{}},
-		{"Kafka Producer", KafkaProducerConfig{}},
-		{"Kafka Consumer", KafkaConsumerConfig{}},
-		{"Firebase", FirebaseConfig{}},
-		{"MinIO", MinIOConfig{}},
-		{"REST Client", RESTClientConfig{}},
-		{"JWT", JWTConfig{}},
-		{"Logger", LoggerConfig{}},
-		{"Tracing", TracingConfig{}},
-		{"HTTP Server", HTTPConfig{}},
-		{"gRPC Server", GRPCConfig{}},
-	}
-
-	for _, s := range sections {
-		sb.WriteString(fmt.Sprintf("# --- %s ---\n", s.name))
-		writeEnvFields(&sb, reflect.TypeOf(s.cfg))
-		sb.WriteString("\n")
-	}
-
-	for _, extra := range extras {
-		t := reflect.TypeOf(extra)
+	for _, cfg := range configs {
+		t := reflect.TypeOf(cfg)
 		if t.Kind() == reflect.Ptr {
 			t = t.Elem()
 		}
-		sb.WriteString(fmt.Sprintf("# --- %s ---\n", t.Name()))
-		writeEnvFields(&sb, t)
-		sb.WriteString("\n")
+		writeConfigStruct(&sb, t)
 	}
 
 	return os.WriteFile(filename, []byte(sb.String()), 0o644)
+}
+
+// writeConfigStruct iterates over a struct's fields. Nested struct fields
+// without an `env` tag are emitted as named sections; fields with an
+// `env` tag are written directly as env variable declarations.
+func writeConfigStruct(sb *strings.Builder, t reflect.Type) {
+	for i := range t.NumField() {
+		field := t.Field(i)
+
+		// Nested struct without its own env tag → section.
+		if field.Type.Kind() == reflect.Struct && field.Tag.Get("env") == "" {
+			sb.WriteString(fmt.Sprintf("# --- %s ---\n", field.Name))
+			writeEnvFields(sb, field.Type)
+			sb.WriteString("\n")
+			continue
+		}
+
+		varName := field.Tag.Get("env")
+		if varName == "" {
+			continue
+		}
+
+		defaultVal := field.Tag.Get("envDefault")
+		sb.WriteString(fmt.Sprintf("%s=%s\n", varName, defaultVal))
+	}
 }
 
 // writeEnvFields iterates over struct fields and writes each env variable
