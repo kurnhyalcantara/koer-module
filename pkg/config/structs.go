@@ -94,6 +94,22 @@ type GRPCConfig struct {
 	Port int `env:"GRPC_PORT" envDefault:"9090"`
 }
 
+// GRPCServiceTarget defines a downstream gRPC service that the client manager
+// should connect to. The address is resolved automatically from the
+// ServiceRegistry (see grpc_registry.go). In production, set the env var
+// {UPPER_SNAKE_NAME}_ADDR (e.g. AUTH_SERVICE_ADDR=auth-service:9091) to
+// override the default localhost address.
+type GRPCServiceTarget struct {
+	Name    string // must match a key in ServiceRegistry (e.g. "auth-service")
+	Enabled bool   // when false the service is skipped during dial
+}
+
+// GRPCClientConfig holds configuration for outgoing gRPC client connections.
+type GRPCClientConfig struct {
+	CertFile string              `env:"GRPC_CLIENT_CERT_FILE"`
+	Services []GRPCServiceTarget // populated programmatically by consumer
+}
+
 // CombinedConfig holds combined HTTP and gRPC server configuration.
 type CombinedConfig struct {
 	HTTP HTTPConfig
